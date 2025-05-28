@@ -207,7 +207,7 @@
         }
       }
 
-      function returnBook(bookId) {
+      function returnBook(bookId) {// mantenimiento local
         const books = JSON.parse(localStorage.getItem("books")) || [];
         const book = books.find((b) => b.id === bookId);
         if (book) {
@@ -232,7 +232,7 @@
         }
       }
 
-      function showReportForm() {
+      function showReportForm() {//elementos visuales de la aplicacion 
         document.getElementById("reportForm").style.display = "block";
         document.getElementById("bookList").style.display = "none";
       }
