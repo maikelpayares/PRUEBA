@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gestión de Biblioteca</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+    />
+    <link rel="stylesheet" href="./style/gestion.css" />
+  </head>
+  <body>
+    <div class="sidebar">
+      <div class="profile">
+        <img
+          src="https://iqxqrqnpwfcnhqnrjxwg.supabase.co/storage/v1/object/public/assets/user-avatar.png"
+          alt="User Avatar"
+        />
+        <h2 id="userName">Nombre de Usuario</h2>
+      </div>
+      <button class="sidebar-button" onclick="showBooks()">
+        Ver Libros Disponibles
+      </button>
+      <button class="sidebar-button" onclick="showBorrowedBooks()">
+        Mis Libros Prestados
+      </button>
+      <button class="sidebar-button" onclick="showFines()">Ver Multas</button>
+      <button class="sidebar-button" onclick="showReportForm()">
+        Enviar Reporte
+      </button>
+      <button class="sidebar-button" onclick="logout()">Cerrar Sesión</button>
+    </div>
+    <div class="main-content">
+      <div class="container">
+        <h1>Biblioteca Virtual</h1>
+        <div class="options">
+          <a href="#" class="option" onclick="showBooks()">
+            <i class="fas fa-book"></i>
+            <span>Ver Libros</span>
+          </a>
+          <a href="#" class="option" onclick="showBorrowedBooks()">
+            <i class="fas fa-book-reader"></i>
+            <span>Mis Préstamos</span>
+          </a>
+          <a href="#" class="option" onclick="showFines()">
+            <i class="fas fa-money-bill"></i>
+            <span>Multas</span>
+          </a>
+          <a href="#" class="option">
+            <i class="fas fa-question-circle"></i>
+            <span>Ayuda</span>
+          </a>
+        </div>
+        <div id="bookList" class="book-list"></div>
+        <div id="reportForm" style="display: none">
+          <h3>Enviar Reporte</h3>
+          <textarea
+            id="reportText"
+            placeholder="Escribe tu reporte aquí"
+          ></textarea>
+          <button onclick="submitReport()">Enviar Reporte</button>
+        </div>
+      </div>
+    </div>
+    <div id="notification" class="notification"></div>
+    <script>
+      let currentUser = JSON.parse(localStorage.getItem("currentUser")) || {};
+
+      document.addEventListener("DOMContentLoaded", function () {
+        document.getElementById("userName").textContent =
+          currentUser.nombre || "Usuario";
+      });
+
+      function showBooks() {
+  const bookList = document.getElementById("bookList");
+  bookList.style.display = "block";
+  bookList.innerHTML = "<h2>Libros Disponibles</h2>";
+
+  fetch("http://localhost:30001/api/libros")
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error("Error al obtener los libros desde la API");
+      }
+      return response.json();
+    })
+    .then((books) => {
+      books.forEach((book) => {
+        if (book.available) {
+          const bookItem = document.createElement("div");
+          bookItem.className = "book-item";
+          bookItem.innerHTML = `
+            <img src="${book.coverUrl || "https://via.placeholder.com/100x150"}" alt="${book.title}" class="book-cover">
+            <div class="book-title">${book.title}</div>
+            <div class="book-author">por ${book.author}</div>
+            <div class="book-category">Categoría: ${book.category}</div>
+            <div>ID del libro: ${book._id}</div>
+            <button onclick="sendLoanRequest('${book._id}', '${book.title}')">Solicitar Préstamo</button>
+          `;
+          bookList.appendChild(bookItem);
+        }
+      });
+    })
+    .catch((error) => {
+      console.error(error);
+      showNotification("Error al cargar los libros", "error");
+    });
+}
+
+
+      function showBorrowedBooks() {
+        const bookList = document.getElementById("bookList");
+        bookList.style.display = "block";
+        bookList.innerHTML = "<h2>Mis Libros Prestados</h2>";
+
+        const loanRequests =
+          JSON.parse(localStorage.getItem("loanRequests")) || [];
+        const userLoans = loanRequests.filter(
+          (request) =>
+            request.userId === currentUser.id && request.status === "approved"
+        );
+
+        if (userLoans.length === 0) {
+          bookList.innerHTML +=
+            "<p>No tienes libros prestados actualmente.</p>";
+        } else {
+          userLoans.forEach((loan) => {
+            const bookItem = document.createElement("div");
+            bookItem.className = "book-item";
+            bookItem.innerHTML = `
+                        <div class="book-title">${loan.bookTitle}</div>
+                        <div>Fecha de préstamo: ${loan.loanDate}</div>
+                        <div>ID del libro: ${loan.bookId}</div>
+                        <button onclick="returnBook('${loan.bookId}')">Devolver Libro</button>
+                    `;
+            bookList.appendChild(bookItem);
+          });
+        }
+      }
+
+      function showFines() {
+        const bookList = document.getElementById("bookList");
+        bookList.style.display = "block";
+        bookList.innerHTML = "<h2>Mis Multas</h2>";
+
+        const multas = JSON.parse(localStorage.getItem("multas")) || [];
+        const userFines = multas.filter(
+          (multa) => multa.cedula === currentUser.cedula
+        );
+
+        if (userFines.length === 0) {
+          bookList.innerHTML += "<p>No tienes multas pendientes.</p>";
+        } else {
+          userFines.forEach((multa) => {
+            const multaItem = document.createElement("div");
+            multaItem.className = "book-item";
+            multaItem.innerHTML = `
+                        <div class="book-title">Multa por: ${multa.libro}</div>
+                        <div>Monto: $${multa.monto}</div>
+                        <div>Fecha de inicio: ${multa.fechaInicio}</div>
+                        <div>Fecha de fin: ${multa.fechaFin}</div>
+                        <button class="pay-fine-button" onclick="payFine('${multa.id}')">Pagar Multa</button>
+                    `;
+            bookList.appendChild(multaItem);
+          });
+        }
+      }
+
+      function payFine(multaId) {
+        const multas = JSON.parse(localStorage.getItem("multas")) || [];
+        const multa = multas.find((m) => m.id === multaId);
+        if (multa) {
+          localStorage.setItem("multaAPagar", JSON.stringify(multa));
+          window.location.href = "facturacion.html";
+        } else {
+          alert("No se encontró la multa especificada.");
+        }
+      }
+
+      function sendLoanRequest(bookId) {
+        const books = JSON.parse(localStorage.getItem("books")) || [];
+        const book = books.find((b) => b.id === bookId);
+
+        if (book && book.available) {
+          const loanRequests =
+            JSON.parse(localStorage.getItem("loanRequests")) || [];
+          const newRequest = {
+            id: Date.now().toString(),
+            userId: currentUser.id,
+            userName: currentUser.nombre,
+            bookId: book.id,
+            bookTitle: book.title,
+            status: "pending",
+            loanDate: new Date().toISOString().split("T")[0],
+          };
+
+          loanRequests.push(newRequest);
+          localStorage.setItem("loanRequests", JSON.stringify(loanRequests));
+
+          showNotification("Solicitud de préstamo enviada al administrador");
+          showBooks(); // Actualizar la lista de libros
+        } else {
+          showNotification(
+            "El libro no está disponible para préstamo",
+            "error"
+          );
+        }
+      }
+
+      function returnBook(bookId) {
+        const books = JSON.parse(localStorage.getItem("books")) || [];
+        const book = books.find((b) => b.id === bookId);
+        if (book) {
+          book.available = true;
+          localStorage.setItem("books", JSON.stringify(books));
+
+          const loanRequests =
+            JSON.parse(localStorage.getItem("loanRequests")) || [];
+          const updatedLoanRequests = loanRequests.filter(
+            (request) =>
+              !(request.bookId === bookId && request.userId === currentUser.id)
+          );
+          localStorage.setItem(
+            "loanRequests",
+            JSON.stringify(updatedLoanRequests)
+          );
+
+          showNotification("Libro devuelto con éxito");
+          showBorrowedBooks();
+        } else {
+          showNotification("No se pudo devolver el libro", "error");
+        }
+      }
+
+      function showReportForm() {
+        document.getElementById("reportForm").style.display = "block";
+        document.getElementById("bookList").style.display = "none";
+      }
+
+      function submitReport() {
+        const reportText = document.getElementById("reportText").value;
+        if (reportText.trim() === "") {
+          showNotification(
+            "Por favor, escribe un reporte antes de enviar",
+            "error"
+          );
+          return;
+        }
+
+        const reports = JSON.parse(localStorage.getItem("reports")) || [];
+        reports.push({
+          id: Date.now().toString(),
+          userId: currentUser.id,
+          userName: currentUser.nombre,
+          text: reportText,
+          date: new Date().toISOString(),
+        });
+        localStorage.setItem("reports", JSON.stringify(reports));
+
+        showNotification("Reporte enviado con éxito");
+        document.getElementById("reportText").value = "";
+        document.getElementById("reportForm").style.display = "none";
+      }
+
+      function showNotification(message, type = "success") {
+        const notification = document.getElementById("notification");
+        notification.textContent = message;
+        notification.style.backgroundColor =
+          type === "success" ? "#4CAF50" : "#f44336";
+        notification.style.display = "block";
+        setTimeout(() => {
+          notification.style.display = "none";
+        }, 3000);
+      }
+
+      function logout() {
+        localStorage.removeItem("currentUser");
+        window.location.href = "login.html";
+      }
+
+      function payFine(multaId) {
+        const multas = JSON.parse(localStorage.getItem("multas")) || [];
+        const multa = multas.find((m) => m.id === multaId);
+        if (multa) {
+          localStorage.setItem("multaAPagar", JSON.stringify(multa));
+          window.location.href = "facturacion.html";
+        } else {
+          alert("No se encontró la multa especificada.");
+        }
+      }
+    </script>
+  </body>
+</html>
